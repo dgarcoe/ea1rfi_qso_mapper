@@ -7,6 +7,7 @@ import re
 
 from io import StringIO, BytesIO
 from math import radians, degrees, atan2, sin, cos
+from streamlit_folium import folium_static
 from geopy.distance import great_circle
 from geopy import Point
 
@@ -176,8 +177,7 @@ if uploaded_file:
         mapa = create_map(qsos, my_grid, my_call)
 
         # Mostrar mapa
-        from streamlit_folium import st_folium
-        st_data = st_folium(mapa, width=1200, height=700)
+        st_data = folium_static(mapa, width=1200, height=700)
 
         # Botón de descarga
         html_buffer = BytesIO()
