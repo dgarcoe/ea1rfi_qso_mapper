@@ -30,6 +30,26 @@ band_colors = {
     "2M": "gray",
 }
 
+def adif_coord_to_decimal(coord):
+    """
+    Convierte ADIF coordinates such as 'N42 52.560' or 'W008 32.700' to decimal.
+    """
+    if not isinstance(coord, str) or not re.match(r'^[NSWE]', coord.strip()):
+        return None
+
+    hemi = coord[0].upper()
+    coord = coord[1:].strip()
+    try:
+        deg, mins = coord.split(" ")
+        deg = float(deg)
+        mins = float(mins)
+        decimal = deg + mins / 60.0
+        if hemi in ['S', 'W']:
+            decimal = -decimal
+        return decimal
+    except Exception:
+        return None
+
 def get_lat_lon(row):
     """
     Obtains coordinates from the the grid or lat/lon fields in the QSO.
