@@ -7,8 +7,8 @@ import re
 
 from io import StringIO, BytesIO
 from math import radians, degrees, atan2, sin, cos
-from streamlit_folium import folium_static
-from geopy.distance import great_circle
+from streamlit_folium import st_folium
+from geopy.distance import great_circle, geodesic
 from geopy import Point
 
 # Streamlit page configuration
@@ -94,6 +94,16 @@ def great_circle_path(lat1, lon1, lat2, lon2, n_points=50):
         coords.append((degrees(lat), (degrees(lon) + 540) % 360 - 180))
     return coords
 
+def calculate_distances(my_grid, row):
+    """
+    Calculates distances from your grid to each QSO
+    """
+    qth_coords = maidenhead.to_location(my_grid)
+
+    qso_coords = (row["lat"], row["lon"])
+    return geodesic(qth_coords, qso_coords).km
+
+
 def color_for_band(band):
     """
     Assigns colour to band
@@ -109,7 +119,7 @@ def create_map(qsos, my_grid, my_call):
     """
     my_lat, my_lon = maidenhead.to_location(my_grid)
 
-    m = folium.Map(location=[my_lat, my_lon], zoom_start=2, tiles="CartoDB positron")
+    m = folium.Map(location=[my_lat, my_lon], zoom_start=2, tiles="Esri.WorldStreetMap")
 
     # Mi QTH
     folium.Marker(
@@ -122,11 +132,12 @@ def create_map(qsos, my_grid, my_call):
         call = row.get("CALL", "N/A")
         grid = row.get("GRIDSQUARE", "")
         band = str(row.get("BAND", ""))
-        freq = str(row.get("FREQ", ""))
+        freq = row.get("FREQ", "").rstrip("0")
+        dist = '{0:.2f}'.format(row.get("DISTANCE", ""))
         mode = row.get("MODE", "")
         color = color_for_band(band)
 
-        tooltip = f"{call}<br>Band: {band}<br>Freq: {freq} MHz<br>Mode: {mode}<br>Grid: {grid}"
+        tooltip = f"<b>{call}</b><br>Band: {band}<br>Freq: {freq} MHz<br>Mode: {mode}<br>Grid: {grid}<br>Distance: {dist} Km"
 
         folium.CircleMarker(
             [row["lat"], row["lon"]],
@@ -153,7 +164,7 @@ def create_map(qsos, my_grid, my_call):
         bottom: 30px;
         left: 30px;
         width: 80px;
-        background-color: white;
+        background-color: black;
         border:2px solid grey;
         z-index:9999;
         font-size:14px;
@@ -163,6 +174,7 @@ def create_map(qsos, my_grid, my_call):
     ">
     <b>Bands</b><br>
     """
+
     for band, color in band_colors.items():
         legend_html += f"<div style='display:flex;align-items:center;'><div style='width:15px;height:15px;background:{color};margin-right:5px;border-radius:3px;'></div>{band}</div>"
     legend_html += "</div>"
@@ -189,6 +201,7 @@ if uploaded_file:
 
     # Obtener coordenadas
     qsos["lat"], qsos["lon"] = zip(*qsos.apply(get_lat_lon, axis=1))
+    qsos["DISTANCE"] = qsos.apply(lambda r: calculate_distances(my_grid,r), axis=1)
     qsos = qsos.dropna(subset=["lat", "lon","GRIDSQUARE"])
 
     if qsos.empty:
@@ -197,7 +210,7 @@ if uploaded_file:
         mapa = create_map(qsos, my_grid, my_call)
 
         # Mostrar mapa
-        st_data = folium_static(mapa, width=1200, height=700)
+        st_data = st_folium(mapa, width=1200, height=700)
 
         # Botón de descarga
         html_buffer = BytesIO()
