@@ -34,29 +34,29 @@ A Streamlit app to map your QSOs from an ADIF file
 
 1. **Clone the repo**
   
-\`\`\`bash
+```bash
 git clone <repository-url>
 cd dialysis-stock-management
-\`\`\`
+```
 
 2. **Create and activate a virtual env (optional)**
 
-\`\`\`bash
+```bash
 python -m venv venv
 source venv/bin/activate
-\`\`\`
+```
 
 3. **Install dependencies**
 
-\`\`\`bash
+```bash
 pip install -r requirements.txt
-\`\`\`
+```
 
 4. **Run the app**
 
-\`\`\`bash
+```bash
 streamlit run app.py
-\`\`\`   
+```   
 
 Then open the link showing in the terminal (default: http://localhost:8501)
 
