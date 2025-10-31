@@ -141,21 +141,22 @@ def create_map(qsos, my_grid, my_call):
 
         folium.CircleMarker(
             [row["lat"], row["lon"]],
-            radius=5,
+            radius=circle_size,
             color=color,
             fill=True,
             fill_opacity=0.8,
             tooltip=tooltip
         ).add_to(m)
 
-        points = great_circle_path(my_lat, my_lon, row["lat"], row["lon"], n_points=60)
+        if show_gc:
+            points = great_circle_path(my_lat, my_lon, row["lat"], row["lon"], n_points=20)
 
-        folium.PolyLine(
-            locations=points,
-            color=color,
-            weight=1,
-            opacity=0.7
-        ).add_to(m)
+            folium.PolyLine(
+                locations=points,
+                color=color,
+                weight=1,
+                opacity=0.7
+            ).add_to(m)
 
     # Leyenda
     legend_html = """
@@ -185,10 +186,15 @@ def create_map(qsos, my_grid, my_call):
 
 # Streamlit interface
 
-st.sidebar.header("Configuration")
+st.sidebar.header("Your Data")
 
 my_call = st.sidebar.text_input("Your Callsign:", "EA1RFI")
 my_grid = st.sidebar.text_input("Your locator (grid):", "IN52PE")
+
+st.sidebar.header("⚙️ Filters")
+circle_size = st.sidebar.slider("Size of QSO markers", 1, 6, 4)
+show_gc = st.sidebar.checkbox("Show Great Circle lines", value=True)
+
 
 uploaded_file = st.file_uploader("📂 Upload your ADIF file (.adi)", type=["adi", "adif"])
 

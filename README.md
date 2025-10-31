@@ -11,12 +11,13 @@ A Streamlit app to map your QSOs from an ADIF file
 - Uses different colours to represent different bands
 - When hovering over the QSO you can see its details such as callsign, frequency, band, mode and grid
 - Calculates the distance to the QSO, showing it also in the tooltip
+- Allow to choose if great circles want to be painted or not
+- Choose the size of the QSO marker
 - You can download your map in an HTML file and do with it what you want
 
 ### 🚧 Soon
 
 - Show the country in the tooltip
-- Allow to choose if great circles want to be painted or not
 - Allow to choose from several map tiles
 - Differentiate icons depending on the mode
 - Show QSO stats in graphs
