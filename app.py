@@ -49,7 +49,7 @@ def adif_coord_to_decimal(coord):
         return decimal
     except Exception:
         return None
-
+        
 def get_lat_lon(row):
     """
     Obtains coordinates from the the grid or lat/lon fields in the QSO.
@@ -101,8 +101,11 @@ def calculate_distances(my_grid, row):
     qth_coords = maidenhead.to_location(my_grid)
 
     qso_coords = (row["lat"], row["lon"])
-    return geodesic(qth_coords, qso_coords).km
 
+    if pd.isna(row["lat"]):
+        return
+    else:
+        return geodesic(qth_coords, qso_coords).km
 
 def color_for_band(band):
     """
@@ -132,7 +135,7 @@ def create_map(qsos, my_grid, my_call):
         call = row.get("CALL", "N/A")
         grid = row.get("GRIDSQUARE", "")
         band = str(row.get("BAND", ""))
-        freq = row.get("FREQ", "").rstrip("0")
+        freq = str(row.get("FREQ", "")).rstrip("0")
         dist = '{0:.2f}'.format(row.get("DISTANCE", ""))
         mode = row.get("MODE", "")
         color = color_for_band(band)
@@ -158,7 +161,7 @@ def create_map(qsos, my_grid, my_call):
                 opacity=0.7
             ).add_to(m)
 
-    # Leyenda
+    # Map legend
     legend_html = """
     <div style="
         position: fixed;
@@ -195,17 +198,17 @@ st.sidebar.header("⚙️ Filters")
 circle_size = st.sidebar.slider("Size of QSO markers", 1, 6, 4)
 show_gc = st.sidebar.checkbox("Show Great Circle lines", value=True)
 
-
 uploaded_file = st.file_uploader("📂 Upload your ADIF file (.adi)", type=["adi", "adif"])
 
 if uploaded_file:
-    adif_content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+
+    adif_content = uploaded_file.getvalue().decode(encoding="ISO-8859-15",errors="ignore")
     adif_data, _ = adif_io.read_from_string(adif_content)
     qsos = pd.DataFrame(adif_data)
 
     st.success(f"✅ {len(qsos)} QSOs loaded")
 
-    # Obtener coordenadas
+    # Obtain coordinates
     qsos["lat"], qsos["lon"] = zip(*qsos.apply(get_lat_lon, axis=1))
     qsos["DISTANCE"] = qsos.apply(lambda r: calculate_distances(my_grid,r), axis=1)
     qsos = qsos.dropna(subset=["lat", "lon","GRIDSQUARE"])
@@ -215,10 +218,10 @@ if uploaded_file:
     else:
         mapa = create_map(qsos, my_grid, my_call)
 
-        # Mostrar mapa
+        # Show map
         st_data = st_folium(mapa, width=1200, height=700)
 
-        # Botón de descarga
+        # Download button
         html_buffer = BytesIO()
         mapa.save(html_buffer, close_file=False)
         html_data = html_buffer.getvalue().decode()
