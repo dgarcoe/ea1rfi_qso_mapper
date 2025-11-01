@@ -3,6 +3,7 @@ import folium
 import pandas as pd
 import adif_io
 import maidenhead
+import tempfile
 import re
 
 from io import StringIO, BytesIO
@@ -32,7 +33,7 @@ band_colors = {
 
 def adif_coord_to_decimal(coord):
     """
-    Convierte ADIF coordinates such as 'N42 52.560' or 'W008 32.700' to decimal.
+    Converts ADIF coordinates such as 'N42 52.560' or 'W008 32.700' to decimal.
     """
     if not isinstance(coord, str) or not re.match(r'^[NSWE]', coord.strip()):
         return None
@@ -49,7 +50,18 @@ def adif_coord_to_decimal(coord):
         return decimal
     except Exception:
         return None
-        
+
+def clean_adif_header(adif_str: str) -> str:
+    """
+    Eliminates the header
+    """
+    match = re.search(r"<EOH\s*>", adif_str, flags=re.IGNORECASE)
+    if not match:
+        # si no hay <EOH>, devuelve el contenido tal cual
+        return adif_str
+    # Devuelve el contenido a partir del primer carácter después de <EOH>
+    return adif_str[match.end():].lstrip()
+
 def get_lat_lon(row):
     """
     Obtains coordinates from the the grid or lat/lon fields in the QSO.
@@ -203,7 +215,9 @@ uploaded_file = st.file_uploader("📂 Upload your ADIF file (.adi)", type=["adi
 if uploaded_file:
 
     adif_content = uploaded_file.getvalue().decode(encoding="ISO-8859-15",errors="ignore")
-    adif_data, _ = adif_io.read_from_string(adif_content)
+    # The adif_io library has issues when logs have duplicated fields in the header so we delete it before processing it
+    adif_content_clean = clean_adif_header(adif_content)
+    adif_data, _ = adif_io.read_from_string(adif_content_clean)
     qsos = pd.DataFrame(adif_data)
 
     st.success(f"✅ {len(qsos)} QSOs loaded")
