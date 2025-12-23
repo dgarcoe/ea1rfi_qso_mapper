@@ -5,6 +5,8 @@ import adif_io
 import maidenhead
 import tempfile
 import re
+import plotly.express as px
+
 
 from io import StringIO, BytesIO
 from math import radians, degrees, atan2, sin, cos
@@ -118,6 +120,26 @@ def calculate_distances(my_grid, row):
         return
     else:
         return geodesic(qth_coords, qso_coords).km
+    
+def calculate_azimuth(my_grid, row):
+    """
+    Calculates azimuth (bearing) in degrees from QTH to QSO
+    """
+    if pd.isna(row["lat"]) or pd.isna(row["lon"]):
+        return None
+
+    lat1, lon1 = maidenhead.to_location(my_grid)
+    lat2, lon2 = row["lat"], row["lon"]
+
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+
+    dlon = lon2 - lon1
+
+    x = sin(dlon) * cos(lat2)
+    y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
+
+    bearing = (degrees(atan2(x, y)) + 360) % 360
+    return bearing
 
 def color_for_band(band):
     """
@@ -198,6 +220,59 @@ def create_map(qsos, my_grid, my_call):
 
     return m
 
+def plot_qsos_by_band(qsos):
+    """
+    Plots QSOs by band
+    """
+    band_counts = (
+        qsos["BAND"]
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "BAND", "count": "QSOS"})
+        )
+
+    fig_band = px.bar(
+        band_counts,
+        x="BAND",
+        y="QSOS",
+        title="QSOs by band",
+        labels={"BAND": "Band", "QSOS": "QSOs"}
+    )
+        
+    st.plotly_chart(fig_band, width='stretch')
+
+def plot_polar_char_azimuth(qsos):
+    """
+    Plots polar chart using azimuth
+    """
+    azimuth_counts = (
+        qsos["AZ_BIN"]
+        .value_counts()
+        .sort_index()
+        .reset_index()
+        .rename(columns={"index": "AZIMUTH", "count": "QSOS"})
+    )
+
+
+    fig_az = px.bar_polar(
+        azimuth_counts,
+        r="QSOS",
+        theta="AZ_BIN",
+        title="QSOs by bearing",
+        labels={"QSOS": "QSOs", "AZIMUTH": "Bearing (°)"},
+    )
+
+    fig_az.update_layout(
+        polar=dict(
+            angularaxis=dict(
+                direction="clockwise",
+                rotation=90
+            )
+        )
+    )
+
+    st.plotly_chart(fig_az, width='stretch')
+
 
 # Streamlit interface
 
@@ -209,6 +284,8 @@ my_grid = st.sidebar.text_input("Your locator (grid):", "IN52PE")
 st.sidebar.header("⚙️ Filters")
 circle_size = st.sidebar.slider("Size of QSO markers", 1, 6, 4)
 show_gc = st.sidebar.checkbox("Show Great Circle lines", value=True)
+
+tab_map, tab_stats = st.tabs(["🗺️ QSO Map", "📊 QSO Stats"])
 
 uploaded_file = st.file_uploader("📂 Upload your ADIF file (.adi)", type=["adi", "adif"])
 
@@ -227,25 +304,48 @@ if uploaded_file:
     qsos["DISTANCE"] = qsos.apply(lambda r: calculate_distances(my_grid,r), axis=1)
     qsos = qsos.dropna(subset=["lat", "lon","GRIDSQUARE"])
 
+    qsos["AZIMUTH"] = qsos.apply(lambda r: calculate_azimuth(my_grid, r), axis=1)
+    qsos = qsos.dropna(subset=["AZIMUTH"])
+    qsos["AZ_BIN"] = (qsos["AZIMUTH"] // 10) * 10
+
+
     if qsos.empty:
         st.warning("⚠️ No valid coordinates were found")
     else:
-        mapa = create_map(qsos, my_grid, my_call)
+        
+        with tab_map:
+            st.subheader("QSO World Map")
 
-        # Show map
-        st_data = st_folium(mapa, width=1200, height=700)
+            mapa = create_map(qsos, my_grid, my_call)
 
-        # Download button
-        html_buffer = BytesIO()
-        mapa.save(html_buffer, close_file=False)
-        html_data = html_buffer.getvalue().decode()
+            # Show map
+            st_data = st_folium(mapa, width=1200, height=700)
 
-        st.download_button(
-            label="💾 Download HTML map file",
-            data=html_data,
-            file_name="map_qsos.html",
-            mime="text/html"
-        )
+            # Download button
+            html_buffer = BytesIO()
+            mapa.save(html_buffer, close_file=False)
+            html_data = html_buffer.getvalue().decode()
+
+            st.download_button(
+                label="💾 Download HTML map file",
+                data=html_data,
+                file_name="map_qsos.html",
+                mime="text/html"
+            )
+
+        with tab_stats:
+            st.subheader("QSO Stats")
+            
+             # ===== Filas de gráficos =====
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                plot_qsos_by_band(qsos)
+
+            with col_right:
+                plot_polar_char_azimuth(qsos)
+
+
 else:
     st.info("👆 Upload your ADIF file to generate the map")
 
