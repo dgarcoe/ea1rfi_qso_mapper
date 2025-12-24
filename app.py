@@ -14,6 +14,7 @@ from streamlit_folium import st_folium
 from geopy.distance import great_circle, geodesic
 from geopy import Point
 
+
 # Streamlit page configuration
 st.set_page_config(page_title="QSO Mapper", layout="wide")
 st.title("🌍 EA1RFI's QSO World Mapper")
@@ -32,6 +33,15 @@ band_colors = {
     "6M": "magenta",
     "2M": "gray",
 }
+
+@st.cache_data(show_spinner="Parsing ADIF…")
+def load_adif(file_bytes):
+
+    adif_content = file_bytes.decode(encoding="ISO-8859-15", errors="ignore")
+    adif_content_clean = clean_adif_header(adif_content)
+    adif_data, _ = adif_io.read_from_string(adif_content_clean)
+
+    return pd.DataFrame(adif_data)
 
 def adif_coord_to_decimal(coord):
     """
@@ -291,11 +301,7 @@ uploaded_file = st.file_uploader("📂 Upload your ADIF file (.adi)", type=["adi
 
 if uploaded_file:
 
-    adif_content = uploaded_file.getvalue().decode(encoding="ISO-8859-15",errors="ignore")
-    # The adif_io library has issues when logs have duplicated fields in the header so we delete it before processing it
-    adif_content_clean = clean_adif_header(adif_content)
-    adif_data, _ = adif_io.read_from_string(adif_content_clean)
-    qsos = pd.DataFrame(adif_data)
+    qsos = load_adif(uploaded_file.getvalue())
 
     st.success(f"✅ {len(qsos)} QSOs loaded")
 
@@ -316,14 +322,14 @@ if uploaded_file:
         with tab_map:
             st.subheader("QSO World Map")
 
-            mapa = create_map(qsos, my_grid, my_call)
+            map = create_map(qsos, my_grid, my_call)
 
             # Show map
-            st_data = st_folium(mapa, width=1200, height=700)
+            st_data = st_folium(map, width=1200, height=700)
 
             # Download button
             html_buffer = BytesIO()
-            mapa.save(html_buffer, close_file=False)
+            map.save(html_buffer, close_file=False)
             html_data = html_buffer.getvalue().decode()
 
             st.download_button(
