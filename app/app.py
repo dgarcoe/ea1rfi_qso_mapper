@@ -6,6 +6,8 @@ import maidenhead
 import tempfile
 import re
 import plotly.express as px
+import numpy as np
+
 
 
 from io import StringIO, BytesIO
@@ -74,6 +76,14 @@ def clean_adif_header(adif_str: str) -> str:
     # Devuelve el contenido a partir del primer carácter después de <EOH>
     return adif_str[match.end():].lstrip()
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
+    return 2 * R * np.arcsin(np.sqrt(a))
+
 def get_lat_lon(row):
     """
     Obtains coordinates from the the grid or lat/lon fields in the QSO.
@@ -117,19 +127,6 @@ def great_circle_path(lat1, lon1, lat2, lon2, n_points=50):
         lon = atan2(y, x)
         coords.append((degrees(lat), (degrees(lon) + 540) % 360 - 180))
     return coords
-
-def calculate_distances(my_grid, row):
-    """
-    Calculates distances from your grid to each QSO
-    """
-    qth_coords = maidenhead.to_location(my_grid)
-
-    qso_coords = (row["lat"], row["lon"])
-
-    if pd.isna(row["lat"]):
-        return
-    else:
-        return geodesic(qth_coords, qso_coords).km
     
 def calculate_azimuth(my_grid, row):
     """
@@ -307,7 +304,8 @@ if uploaded_file:
 
     # Obtain coordinates
     qsos["lat"], qsos["lon"] = zip(*qsos.apply(get_lat_lon, axis=1))
-    qsos["DISTANCE"] = qsos.apply(lambda r: calculate_distances(my_grid,r), axis=1)
+    my_lat, my_lon = maidenhead.to_location(my_grid)
+    qsos["DISTANCE"] = haversine(my_lat, my_lon, qsos["lat"], qsos["lon"])
     qsos = qsos.dropna(subset=["lat", "lon","GRIDSQUARE"])
 
     qsos["AZIMUTH"] = qsos.apply(lambda r: calculate_azimuth(my_grid, r), axis=1)
