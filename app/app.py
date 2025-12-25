@@ -1,24 +1,14 @@
 import streamlit as st
 import folium
-import pandas as pd
-import adif_io
 import maidenhead
-import tempfile
-import re
-import plotly.express as px
-import numpy as np
-import sqlite3
-
-
 
 from io import StringIO, BytesIO
-from math import radians, degrees, atan2, sin, cos
 from streamlit_folium import st_folium
-from geopy.distance import great_circle, geodesic
 from geopy import Point
-from datetime import datetime
-
-DB_PATH = "/data/usage.db"
+from db import log_upload
+from adif_utils import load_adif
+from geo_utils import get_lat_lon, haversine, great_circle_path, calculate_azimuth
+from stats_plots import plot_qsos_by_band, plot_polar_char_azimuth
 
 # Streamlit page configuration
 st.set_page_config(page_title="QSO Mapper", layout="wide")
@@ -38,156 +28,6 @@ band_colors = {
     "6M": "magenta",
     "2M": "gray",
 }
-
-def log_upload(callsign, filename, qso_count, request_headers=None):
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS uploads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            callsign TEXT,
-            filename TEXT,
-            qso_count INTEGER,
-            ip TEXT,
-            user_agent TEXT
-        )
-    """)
-
-    ip = None
-    ua = None
-    if request_headers:
-        ip = request_headers.get("X-Forwarded-For", "")
-        ua = request_headers.get("User-Agent", "")
-
-    cur.execute("""
-        INSERT INTO uploads (timestamp, callsign, filename, qso_count, ip, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        datetime.utcnow().isoformat(),
-        callsign,
-        filename,
-        qso_count,
-        ip,
-        ua
-    ))
-
-    conn.commit()
-    conn.close()
-
-@st.cache_data(show_spinner="Parsing ADIF…")
-def load_adif(file_bytes):
-
-    adif_content = file_bytes.decode(encoding="ISO-8859-15", errors="ignore")
-    adif_content_clean = clean_adif_header(adif_content)
-    adif_data, _ = adif_io.read_from_string(adif_content_clean)
-
-    return pd.DataFrame(adif_data)
-
-def adif_coord_to_decimal(coord):
-    """
-    Converts ADIF coordinates such as 'N42 52.560' or 'W008 32.700' to decimal.
-    """
-    if not isinstance(coord, str) or not re.match(r'^[NSWE]', coord.strip()):
-        return None
-
-    hemi = coord[0].upper()
-    coord = coord[1:].strip()
-    try:
-        deg, mins = coord.split(" ")
-        deg = float(deg)
-        mins = float(mins)
-        decimal = deg + mins / 60.0
-        if hemi in ['S', 'W']:
-            decimal = -decimal
-        return decimal
-    except Exception:
-        return None
-
-def clean_adif_header(adif_str: str) -> str:
-    """
-    Eliminates the header
-    """
-    match = re.search(r"<EOH\s*>", adif_str, flags=re.IGNORECASE)
-    if not match:
-        # si no hay <EOH>, devuelve el contenido tal cual
-        return adif_str
-    # Devuelve el contenido a partir del primer carácter después de <EOH>
-    return adif_str[match.end():].lstrip()
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
-    return 2 * R * np.arcsin(np.sqrt(a))
-
-def get_lat_lon(row):
-    """
-    Obtains coordinates from the the grid or lat/lon fields in the QSO.
-    """
-    grid = row.get("GRIDSQUARE") or row.get("MY_GRIDSQUARE")
-    if isinstance(grid, str):
-        try:
-            return maidenhead.to_location(grid)
-        except Exception:
-            pass
-
-    lat = row.get("LAT")
-    lon = row.get("LON")
-    if isinstance(lat, str) and isinstance(lon, str):
-        lat_dec = adif_coord_to_decimal(lat)
-        lon_dec = adif_coord_to_decimal(lon)
-        if lat_dec is not None and lon_dec is not None:
-            return lat_dec, lon_dec
-
-    return None, None
-
-def great_circle_path(lat1, lon1, lat2, lon2, n_points=50):
-    """
-    Calculates intermediate points through the great circle between two coordinates to paint it in the map.
-    """
-    coords = []
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-
-    # Distancia angular
-    d = 2 * atan2(((sin((lat2 - lat1) / 2))**2 + cos(lat1) * cos(lat2) * (sin((lon2 - lon1) / 2))**2)**0.5,
-                  (1 - ((sin((lat2 - lat1) / 2))**2 + cos(lat1) * cos(lat2) * (sin((lon2 - lon1) / 2))**2)**0.5)**0.5)
-
-    for i in range(n_points + 1):
-        f = i / n_points
-        A = sin((1 - f) * d) / sin(d)
-        B = sin(f * d) / sin(d)
-        x = A * cos(lat1) * cos(lon1) + B * cos(lat2) * cos(lon2)
-        y = A * cos(lat1) * sin(lon1) + B * cos(lat2) * sin(lon2)
-        z = A * sin(lat1) + B * sin(lat2)
-        lat = atan2(z, (x**2 + y**2)**0.5)
-        lon = atan2(y, x)
-        coords.append((degrees(lat), (degrees(lon) + 540) % 360 - 180))
-    return coords
-    
-def calculate_azimuth(my_grid, row):
-    """
-    Calculates azimuth (bearing) in degrees from QTH to QSO
-    """
-    if pd.isna(row["lat"]) or pd.isna(row["lon"]):
-        return None
-
-    lat1, lon1 = maidenhead.to_location(my_grid)
-    lat2, lon2 = row["lat"], row["lon"]
-
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-
-    dlon = lon2 - lon1
-
-    x = sin(dlon) * cos(lat2)
-    y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
-
-    bearing = (degrees(atan2(x, y)) + 360) % 360
-    return bearing
 
 def color_for_band(band):
     """
@@ -267,59 +107,6 @@ def create_map(qsos, my_grid, my_call):
     m.get_root().html.add_child(folium.Element(legend_html))
 
     return m
-
-def plot_qsos_by_band(qsos):
-    """
-    Plots QSOs by band
-    """
-    band_counts = (
-        qsos["BAND"]
-            .value_counts()
-            .reset_index()
-            .rename(columns={"index": "BAND", "count": "QSOS"})
-        )
-
-    fig_band = px.bar(
-        band_counts,
-        x="BAND",
-        y="QSOS",
-        title="QSOs by band",
-        labels={"BAND": "Band", "QSOS": "QSOs"}
-    )
-        
-    st.plotly_chart(fig_band, width='stretch')
-
-def plot_polar_char_azimuth(qsos):
-    """
-    Plots polar chart using azimuth
-    """
-    azimuth_counts = (
-        qsos["AZ_BIN"]
-        .value_counts()
-        .sort_index()
-        .reset_index()
-        .rename(columns={"index": "AZIMUTH", "count": "QSOS"})
-    )
-
-
-    fig_az = px.bar_polar(
-        azimuth_counts,
-        r="QSOS",
-        theta="AZ_BIN",
-        title="QSOs by bearing",
-        labels={"QSOS": "QSOs", "AZIMUTH": "Bearing (°)"},
-    )
-
-    fig_az.update_layout(
-        polar=dict(
-            angularaxis=dict(
-                direction="clockwise",
-                rotation=90
-            )
-        )
-    )
-
-    st.plotly_chart(fig_az, width='stretch')
 
 
 # Streamlit interface
