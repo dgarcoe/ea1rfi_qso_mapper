@@ -5,6 +5,8 @@ services:
     build: ./app
     container_name: qso_app
     restart: unless-stopped
+    volumes:
+      - ./data:/data
     expose:
       - "8501"
 

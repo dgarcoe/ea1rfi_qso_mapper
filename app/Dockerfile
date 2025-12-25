@@ -6,11 +6,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    sqlite3 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
+
+RUN sqlite3 /data/usage.db "\
+CREATE TABLE IF NOT EXISTS uploads ( \
+    id INTEGER PRIMARY KEY AUTOINCREMENT, \
+    timestamp TEXT, \
+    callsign TEXT, \
+    filename TEXT, \
+    qso_count INTEGER, \
+    ip TEXT, \
+    user_agent TEXT \
+);"
 
 EXPOSE 8501
 

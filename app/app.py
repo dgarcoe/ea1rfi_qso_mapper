@@ -7,6 +7,7 @@ import tempfile
 import re
 import plotly.express as px
 import numpy as np
+import sqlite3
 
 
 
@@ -15,7 +16,9 @@ from math import radians, degrees, atan2, sin, cos
 from streamlit_folium import st_folium
 from geopy.distance import great_circle, geodesic
 from geopy import Point
+from datetime import datetime
 
+DB_PATH = "/data/usage.db"
 
 # Streamlit page configuration
 st.set_page_config(page_title="QSO Mapper", layout="wide")
@@ -35,6 +38,44 @@ band_colors = {
     "6M": "magenta",
     "2M": "gray",
 }
+
+def log_upload(callsign, filename, qso_count, request_headers=None):
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            callsign TEXT,
+            filename TEXT,
+            qso_count INTEGER,
+            ip TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    ip = None
+    ua = None
+    if request_headers:
+        ip = request_headers.get("X-Forwarded-For", "")
+        ua = request_headers.get("User-Agent", "")
+
+    cur.execute("""
+        INSERT INTO uploads (timestamp, callsign, filename, qso_count, ip, user_agent)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.utcnow().isoformat(),
+        callsign,
+        filename,
+        qso_count,
+        ip,
+        ua
+    ))
+
+    conn.commit()
+    conn.close()
 
 @st.cache_data(show_spinner="Parsing ADIF…")
 def load_adif(file_bytes):
@@ -301,6 +342,14 @@ if uploaded_file:
     qsos = load_adif(uploaded_file.getvalue())
 
     st.success(f"✅ {len(qsos)} QSOs loaded")
+
+    headers = st.context.headers if hasattr(st, "context") else {}
+    log_upload(
+        callsign=my_call,
+        filename=uploaded_file.name,
+        qso_count=len(qsos),
+        request_headers=headers
+    )
 
     # Obtain coordinates
     qsos["lat"], qsos["lon"] = zip(*qsos.apply(get_lat_lon, axis=1))
