@@ -5,10 +5,10 @@ import maidenhead
 from io import StringIO, BytesIO
 from streamlit_folium import st_folium
 from geopy import Point
-from app.core.db import log_upload
-from app.core.adif_utils import load_adif
-from app.core.geo_utils import get_lat_lon, haversine, great_circle_path, calculate_azimuth
-from app.core.stats_plots import plot_qsos_by_band, plot_polar_char_azimuth
+from core.db import log_upload
+from core.adif_utils import load_adif
+from core.geo_utils import get_lat_lon, haversine, great_circle_path, calculate_azimuth
+from core.stats_plots import plot_qsos_by_band, plot_polar_char_azimuth
 
 # Streamlit page configuration
 st.set_page_config(page_title="QSO Mapper", layout="wide")
