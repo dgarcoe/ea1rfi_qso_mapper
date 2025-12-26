@@ -3,7 +3,7 @@ version: "3.9"
 services:
   app:
     build: ./app
-    container_name: qso_app
+    container_name: ea1rfi_app
     restart: unless-stopped
     volumes:
       - ./data:/data
