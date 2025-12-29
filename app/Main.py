@@ -31,4 +31,6 @@ I'm eager to find you in the waves and make some HF contacts!
 
 components.iframe("https://logbook.qrz.com/lbstat/EA1RFI/", height=500)
 
+components.html('<a href="https://info.flagcounter.com/Wx1V"><img src="https://s01.flagcounter.com/countxl/Wx1V/bg_FFFFFF/txt_000000/border_CCCCCC/columns_5/maxflags_35/viewers_0/labels_1/pageviews_1/flags_0/percent_0/" alt="Flag Counter" border="0"></a>')
+
 
