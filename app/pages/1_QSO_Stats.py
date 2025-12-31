@@ -96,6 +96,7 @@ def create_map(qsos, my_grid, my_call):
         font-size:14px;
         border-radius:10px;
         padding:10px;
+        color: white;
         box-shadow:2px 2px 4px rgba(0,0,0,0.3);
     ">
     <b>Bands</b><br>
