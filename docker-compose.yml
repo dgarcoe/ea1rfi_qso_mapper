@@ -9,6 +9,8 @@ services:
       - ./data:/data
     expose:
       - "8501"
+    networks:
+      - ea1rfi-network
 
   nginx:
     image: nginx:alpine
@@ -23,6 +25,8 @@ services:
       - ./certbot/conf:/etc/letsencrypt
     depends_on:
       - app
+    networks:
+      - ea1rfi-network
 
   certbot:
     image: certbot/certbot
@@ -33,4 +37,4 @@ services:
 
 networks:
   ea1rfi-network:
-    driver: bridge
+    external: true
